@@ -1,0 +1,8 @@
+[package]
+name = "sbi"
+version = "0.0.0"
+authors = ["Austin Kiekintveld <akiekintveld@icloud.com>"]
+edition = "2018"
+
+[dependencies]
+bit_field = "0.10.1"
