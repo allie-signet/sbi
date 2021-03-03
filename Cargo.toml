@@ -3,6 +3,11 @@ name = "sbi"
 version = "0.0.0"
 authors = ["Austin Kiekintveld <akiekintveld@icloud.com>"]
 edition = "2018"
+description = "A Rust wrapper around the RISC-V Supervisor Binary Interface (SBI)."
+repository = "https://github.com/akiekintveld/sbi"
+license = "MIT"
+keywords = ["riscv", "sbi", "no_std"]
+categories = ["api-bindings", "embedded", "hardware-support", "no-std"]
 
 [dependencies]
 bit_field = "0.10.1"
