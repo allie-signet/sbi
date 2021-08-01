@@ -1,77 +1,94 @@
-//! A Rust wrapper around the RISC-V Supervisor Binary Interface (SBI).
-//!
-//! This crate aims to provide an idiomatic Rust interface to all the core
-//! extensions of [SBI v0.2.0+](https://github.com/riscv/riscv-sbi-doc).
+#![doc = include_str!("../README.md")]
 #![no_std]
-#![feature(asm)]
-#![deny(missing_docs)]
+#![feature(asm, never_type)]
+#![warn(missing_docs)]
+#![cfg(any(
+    target_arch = "riscv32",
+    target_arch = "riscv64",
+    target_arch = "riscv128",
+))]
 
-use ::core::num::NonZeroIsize;
+use core::convert::TryFrom;
 
-/// A unique identifier for an extension.
-pub type ExtensionId = i32;
+pub mod base;
+pub mod srst;
+pub mod time;
 
-/// A unique identifier for a function within an extension.
-pub type FunctionId = i32;
+/// A raw value returned from an SBI call.
+pub struct Ret {
+    /// The error returned.
+    pub error: usize,
+    /// The value returned.
+    pub value: usize,
+}
 
-/// A raw value for an argument to an SBI call.
-pub type ArgValue = isize;
-
-/// A raw value for a return from an SBI call.
-pub type RetValue = isize;
-
-/// A raw error for a return from an SBI call.
-pub type RetError = NonZeroIsize;
-
-/// The `ecall` instruction is used to make SBI calls. This function is exposed
-/// to allow access to experimental, vendor-specific, and firmware-specific SBI
-/// extensions. For core extensions, you should prefer using the individual
-/// modules.
-pub fn ecall(
-    eid: ExtensionId,
-    fid: FunctionId,
-    args: (ArgValue, ArgValue, ArgValue),
-) -> Result<RetValue, (RetValue, RetError)> {
-    #[cfg(any(
-        target_arch = "riscv32",
-        target_arch = "riscv64",
-        target_arch = "riscv128",
-    ))]
-    {
-        let error = 0isize;
-        let value = 0isize;
-        unsafe {
-            asm!(
-                "ecall",
-                in("a0") args.0,
-                in("a1") args.1,
-                in("a2") args.2,
-                in("a6") fid,
-                in("a7") eid,
-                lateout("a0") error,
-                lateout("a1") value,
-            );
-        }
-        if let Some(error) = NonZeroIsize::new(error) {
-            Err((value, error))
+impl From<Ret> for Result<usize, StandardError> {
+    fn from(ret: Ret) -> Self {
+        use core::convert::TryInto;
+        if let Ok(error) = ret.error.try_into() {
+            Err(error)
         } else {
-            Ok(value)
+            Ok(ret.value)
         }
-    }
-    #[cfg(not(any(
-        target_arch = "riscv32",
-        target_arch = "riscv64",
-        target_arch = "riscv128"
-    )))]
-    {
-        drop((eid, fid, args));
-        unimplemented!("SBI is only supported on RISC-V");
     }
 }
 
-pub mod base;
-pub mod hsm;
-pub mod ipi;
-pub mod reset;
-pub mod rfence;
-pub mod timer;
+/// A standard error returned from an SBI call.
+#[non_exhaustive]
+pub enum StandardError {
+    Failed,
+    NotSupported,
+    InvalidParam,
+    Denied,
+    InvalidAddr,
+    AlreadyAvailable,
+    AlreadyStarted,
+    AlreadyStopped,
+    Unknown,
+}
+
+impl TryFrom<usize> for StandardError {
+    type Error = ();
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value as isize {
+            0 => Err(()),
+            -1 => Ok(StandardError::Failed),
+            -2 => Ok(StandardError::NotSupported),
+            -3 => Ok(StandardError::InvalidParam),
+            -4 => Ok(StandardError::Denied),
+            -5 => Ok(StandardError::InvalidAddr),
+            -6 => Ok(StandardError::AlreadyAvailable),
+            -7 => Ok(StandardError::AlreadyStarted),
+            -8 => Ok(StandardError::AlreadyStopped),
+            _ => Ok(StandardError::Unknown),
+        }
+    }
+}
+
+const NUM_ARGS: usize = 6;
+
+/// The `ecall` instruction is used to make SBI calls. This function is exposed
+/// to allow access to experimental, vendor-specific, and firmware-specific SBI
+/// extensions. For core extensions, you should prefer using the functions in
+/// the individual modules of this crate.
+#[inline(always)]
+pub fn ecall(eid: u32, fid: u32, args: [usize; NUM_ARGS]) -> Ret {
+    let mut error;
+    let mut value;
+    unsafe {
+        asm!(
+            "ecall",
+            in("a0") args[0],
+            in("a1") args[1],
+            in("a2") args[2],
+            in("a3") args[3],
+            in("a4") args[4],
+            in("a5") args[5],
+            in("a6") fid,
+            in("a7") eid,
+            lateout("a0") error,
+            lateout("a1") value,
+        );
+    }
+    Ret { error, value }
+}

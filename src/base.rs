@@ -2,46 +2,88 @@
 //! conforming SBI implementation must implement. It permits the
 //! supervisor to probe for information about the implementation.
 
-use {crate::ExtensionId, ::core::num::NonZeroIsize};
+use core::num::NonZeroUsize;
 
-/// Extension identifier for the base extension.
-pub const EID: ExtensionId = 0x10;
+const EID: u32 = 0x10;
 
 /// Denotes the version of the SBI specification that an implementation
 /// conforms to.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct SpecVersion {
-    /// The major revision of the version.
-    pub major: u8,
-    /// The minor revision of the version.
-    pub minor: u32,
+pub struct SpecVersion(pub u32);
+
+impl SpecVersion {
+    /// The major revision.
+    pub fn major(&self) -> u32 {
+        use bit_field::BitField;
+        self.0.get_bits(24..31)
+    }
+
+    /// The minor revision.
+    pub fn minor(&self) -> u32 {
+        use bit_field::BitField;
+        self.0.get_bits(0..24)
+    }
 }
 
 /// A unique identifier for an implementation.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct ImplId(isize);
+pub struct ImplId(pub usize);
 
-/// Denotes the version of an implementation.
+impl ImplId {
+    /// Checks whether the implementation is the Berkley Boot Loader.
+    pub fn is_bbl(&self) -> bool {
+        self.0 == 0x0
+    }
+
+    /// Checks whether the implementation is OpenSBI.
+    pub fn is_opensbi(&self) -> bool {
+        self.0 == 0x1
+    }
+
+    /// Checks whether the implementation is Xvisor.
+    pub fn is_xvisor(&self) -> bool {
+        self.0 == 0x2
+    }
+
+    /// Checks whether the implementation is KVM.
+    pub fn is_kvm(&self) -> bool {
+        self.0 == 0x3
+    }
+
+    /// Checks whether the implementation is RustSBI.
+    pub fn is_rustsbi(&self) -> bool {
+        self.0 == 0x4
+    }
+
+    /// Checks whether the implementation is Diosix.
+    pub fn is_diosix(&self) -> bool {
+        self.0 == 0x5
+    }
+}
+
+/// A unique identifier for an machine vendor (`mvendorid`).
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct ImplVersion(isize);
+pub struct MachineVendorId(pub u32);
 
-/// A unique identifier for an machine vendor.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct MachineVendorId(isize);
+impl MachineVendorId {
+    /// The JEDEC bank.
+    pub fn bank(&self) -> u32 {
+        use bit_field::BitField;
+        self.0.get_bits(7..32)
+    }
 
-/// A unique identifier for an machine architecture.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct MachineArchId(isize);
+    /// The JEDEC offset.
+    pub fn offset(&self) -> u32 {
+        use bit_field::BitField;
+        self.0.get_bits(0..7)
+    }
+}
 
-/// A unique identifier for an machine implementation.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct MachineImplId(isize);
-
-/// Denotes availability of an extension and optional extension-specific data.
+/// Denotes availability of an extension.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum ExtensionAvailability {
     /// An available extension and optional extension-specific data.
-    Available(NonZeroIsize),
+    Available(NonZeroUsize),
     /// An unavailable extension.
     Unavailable,
 }
@@ -49,43 +91,34 @@ pub enum ExtensionAvailability {
 /// Retrieve the version of the SBI specification the implementation
 /// conforms to.
 pub fn spec_version() -> SpecVersion {
-    use {
-        crate::{ecall, FunctionId},
-        ::bit_field::BitField,
-    };
-    const FID: FunctionId = 0x0;
-    let value =
-        ecall(EID, FID, (0, 0, 0)).expect("Getting specification version must always succeed.");
-    SpecVersion {
-        major: value.get_bits(24..31) as u8,
-        minor: value.get_bits(0..24) as u32,
-    }
+    use crate::ecall;
+    let ret = ecall(EID, 0x0, Default::default());
+    assert_eq!(ret.error, 0x0);
+    SpecVersion(ret.value as u32)
 }
 
 /// Retrieve an identifier unique to the implementation.
 pub fn impl_id() -> ImplId {
-    use crate::{ecall, FunctionId};
-    const FID: FunctionId = 0x1;
-    let value = ecall(EID, FID, (0, 0, 0)).expect("Getting implementation ID must always succeed.");
-    ImplId(value)
+    use crate::ecall;
+    let ret = ecall(EID, 0x1, Default::default());
+    assert_eq!(ret.error, 0x0);
+    ImplId(ret.value)
 }
 
 /// Retrieve the version of the implementation.
-pub fn impl_version() -> ImplVersion {
-    use crate::{ecall, FunctionId};
-    const FID: FunctionId = 0x2;
-    let value =
-        ecall(EID, FID, (0, 0, 0)).expect("Getting implementation version must always succeed.");
-    ImplVersion(value)
+pub fn impl_version() -> usize {
+    use crate::ecall;
+    let ret = ecall(EID, 0x2, Default::default());
+    assert_eq!(ret.error, 0x0);
+    ret.value
 }
 
 /// Retrieve the availability of a given extension by its ID.
-pub fn probe_extension(eid: ExtensionId) -> ExtensionAvailability {
-    use crate::{ecall, ArgValue, FunctionId};
-    const FID: FunctionId = 0x3;
-    let value =
-        ecall(EID, FID, (eid as ArgValue, 0, 0)).expect("Probing extensions must always succeed.");
-    if let Some(value) = NonZeroIsize::new(value) {
+pub fn probe_extension(eid: u32) -> ExtensionAvailability {
+    use crate::ecall;
+    let ret = ecall(EID, 0x3, [eid as usize, 0, 0, 0, 0, 0]);
+    assert_eq!(ret.error, 0x0);
+    if let Some(value) = NonZeroUsize::new(ret.value) {
         ExtensionAvailability::Available(value)
     } else {
         ExtensionAvailability::Unavailable
@@ -94,26 +127,24 @@ pub fn probe_extension(eid: ExtensionId) -> ExtensionAvailability {
 
 /// Retrieve an identifier unique to the machine vendor.
 pub fn machine_vendor_id() -> MachineVendorId {
-    use crate::{ecall, FunctionId};
-    const FID: FunctionId = 0x4;
-    let value = ecall(EID, FID, (0, 0, 0)).expect("Getting machine vendor ID must always succeed.");
-    MachineVendorId(value)
+    use crate::ecall;
+    let ret = ecall(EID, 0x4, Default::default());
+    assert_eq!(ret.error, 0x0);
+    MachineVendorId(ret.value as u32)
 }
 
 /// Retrieve an identifier unique to the machine architecture.
-pub fn machine_arch_id() -> MachineArchId {
-    use crate::{ecall, FunctionId};
-    const FID: FunctionId = 0x5;
-    let value =
-        ecall(EID, FID, (0, 0, 0)).expect("Getting machine architecture ID must always succeed.");
-    MachineArchId(value)
+pub fn machine_arch_id() -> usize {
+    use crate::ecall;
+    let ret = ecall(EID, 0x5, Default::default());
+    assert_eq!(ret.error, 0x0);
+    ret.value
 }
 
 /// Retrieve an identifier unique to the machine implementation.
-pub fn machine_impl_id() -> MachineImplId {
-    use crate::{ecall, FunctionId};
-    const FID: FunctionId = 0x6;
-    let value =
-        ecall(EID, FID, (0, 0, 0)).expect("Getting machine implementation ID must always succeed.");
-    MachineImplId(value)
+pub fn machine_impl_id() -> usize {
+    use crate::ecall;
+    let ret = ecall(EID, 0x6, Default::default());
+    assert_eq!(ret.error, 0x0);
+    ret.value
 }
