@@ -6,6 +6,7 @@ use crate::StandardError;
 const EID: u32 = 0x53525354;
 
 /// A type of system reset.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum Type {
     Shutdown,
     ColdReboot,
@@ -23,6 +24,7 @@ impl From<Type> for usize {
 }
 
 /// A reason for a system reset.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum Reason {
     NoReason,
     SystemFailure,

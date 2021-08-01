@@ -16,6 +16,7 @@ pub mod srst;
 pub mod time;
 
 /// A raw value returned from an SBI call.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct Ret {
     /// The error returned.
     pub error: usize,
@@ -35,6 +36,7 @@ impl From<Ret> for Result<usize, StandardError> {
 }
 
 /// A standard error returned from an SBI call.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[non_exhaustive]
 pub enum StandardError {
     Failed,
