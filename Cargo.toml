@@ -2,7 +2,7 @@ cargo-features = ["edition2021"]
 
 [package]
 name = "sbi"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Austin Kiekintveld <akiekintveld@icloud.com>"]
 edition = "2021"
 description = "A Rust wrapper around the RISC-V Supervisor Binary Interface (SBI)."

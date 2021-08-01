@@ -6,6 +6,7 @@
     target_arch = "riscv32",
     target_arch = "riscv64",
     target_arch = "riscv128",
+    doc,
 ))]
 
 use core::convert::TryFrom;
