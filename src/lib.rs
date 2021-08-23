@@ -14,6 +14,7 @@ use core::convert::TryFrom;
 pub mod base;
 pub mod srst;
 pub mod time;
+pub mod legacy;
 
 /// A raw value returned from an SBI call.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -74,6 +75,10 @@ const NUM_ARGS: usize = 6;
 /// to allow access to experimental, vendor-specific, and firmware-specific SBI
 /// extensions. For core extensions, you should prefer using the functions in
 /// the individual modules of this crate.
+///
+/// # Safety
+/// The behavior of this function is undefined if it is not used to make 
+/// SBI-conforming calls.
 #[inline(always)]
 pub fn ecall(eid: u32, fid: u32, args: [usize; NUM_ARGS]) -> Ret {
     let mut error;
